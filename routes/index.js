@@ -3,6 +3,7 @@ const router = express.Router();
 const passport = require("passport");
 
 const User = require("../models/user");
+const keys = require("../config/keys");
 
 // index route
 router.get("/", (req, res) => {
@@ -16,6 +17,11 @@ router.get("/register", (req, res) => {
 //submit registration information
 router.post("/register", (req, res) => {
     let newUser = new User({ username: req.body.username});
+
+    if(req.body.admincode === keys.adminCode){
+        newUser.isAdmin = true;
+    }
+
     User.register(newUser, req.body.password, (err, user) => {
         if(err){
             req.flash("error", err.message);
