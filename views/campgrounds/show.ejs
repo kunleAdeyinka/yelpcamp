@@ -8,6 +8,7 @@
                 <li class="list-group-item">Info 2</li>
                 <li class="list-group-item">Info 3</li>
             </div>
+            <div id="map" style='width: 260px; height: 300px;'></div>
         </div>
         <div class="col-md-9">
             <div class="thumbnail">               
@@ -58,6 +59,18 @@
     </div>
 </div>
 
+<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v2.3.0/mapbox-gl-geocoder.min.js'></script>
+<link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v2.3.0/mapbox-gl-geocoder.css' type='text/css' />
+<script>
 
+mapboxgl.accessToken = 'pk.eyJ1IjoiYWFkZXlpbmthMDA3IiwiYSI6ImNqcTk0ZWptZTB2YWM0M2s0dm4ycHBhazEifQ.4Lz7IcxUsjLrskOC6z0cPQ';
+var map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/streets-v11',
+  center: [<%= campground.lng %>, <%= campground.lat %>],
+  zoom: 8
+});
+
+</script>
 
 <% include ../partials/footer %>
