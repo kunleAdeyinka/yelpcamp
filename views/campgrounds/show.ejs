@@ -8,6 +8,7 @@
                 <li class="list-group-item">Info 2</li>
                 <li class="list-group-item">Info 3</li>
             </div>
+            <div id="map" style='width: 260px; height: 300px;'></div>
         </div>
         <div class="col-md-9">
             <div class="thumbnail">               
@@ -16,8 +17,12 @@
                     <h4 class="pull-right">$<%= campground.price %></h4>
                     <h4><a href="#"><%= campground.name %></a></h4>
                     <p><%= campground.description %></p>
-                    <p><em> Submitted by <%= campground.author.username %> </em></p>
-                    <% if(currentUser && campground.author.id.equals(currentUser._id)){ %>
+                    <p>
+                        <em> 
+                            Submitted by: <a href="/users/<%= campground.author.id %>"><%= campground.author.username %></a>  
+                        </em>
+                    </p>
+                    <% if(currentUser && campground.author.id.equals(currentUser._id) || currentUser && currentUser.isAdmin){ %>
                         <a class="btn btn-xs btn-warning" href="/campgrounds/<%= campground._id %>/edit">Edit</a>
                         <form class="delete-form" action="/campgrounds/<%= campground._id %>?_method=DELETE" method="POST">
                             <button class="btn btn-xs btn-danger">Delete</button>
@@ -41,7 +46,7 @@
                                 <p>
                                     <%= comment.text %>
                                 </p>
-                                <% if(currentUser && comment.author.id.equals(currentUser._id)){ %>
+                                <% if(currentUser && comment.author.id.equals(currentUser._id) || currentUser && currentUser.isAdmin){ %>
                                     <a href="/campgrounds/<%=campground._id%>/comments/<%=comment._id%>/edit" class="btn btn-xs btn-warning">
                                         Edit
                                     </a>
@@ -58,6 +63,18 @@
     </div>
 </div>
 
+<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v2.3.0/mapbox-gl-geocoder.min.js'></script>
+<link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v2.3.0/mapbox-gl-geocoder.css' type='text/css' />
+<script>
 
+mapboxgl.accessToken = 'pk.eyJ1IjoiYWFkZXlpbmthMDA3IiwiYSI6ImNqcTk0ZWptZTB2YWM0M2s0dm4ycHBhazEifQ.4Lz7IcxUsjLrskOC6z0cPQ';
+var map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/streets-v11',
+  center: [<%= campground.lng %>, <%= campground.lat %>],
+  zoom: 8
+});
+
+</script>
 
 <% include ../partials/footer %>
