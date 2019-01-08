@@ -10,13 +10,31 @@ const url = ''
 
 //show all campgrounds
 router.get("/", (req, res) => {
-    Campground.find({}, (err, allCampgrounds) => {
-        if(err){
-            console.log(err);
-        }else{
-            res.render("campgrounds/index", { campgrounds: allCampgrounds });
-        }
-    });
+    let noMatch = null;
+
+    if(req.query.search){
+
+        const regex = new RegExp(middleware.escapeRegex(req.query.search), 'gi');
+
+        Campground.find({name: regex}, (err, allCampgrounds) => {
+            if(err){
+                console.log(err);
+            }else{
+                if(allCampgrounds.length < 1) {
+                    noMatch = "No campgrounds match that query, please try again.";
+                }
+                res.render("campgrounds/index", { campgrounds: allCampgrounds, noMatch: noMatch });
+            }
+        });
+    }else{
+        Campground.find({}, (err, allCampgrounds) => {
+            if(err){
+                console.log(err);
+            }else{
+                res.render("campgrounds/index", { campgrounds: allCampgrounds, noMatch: noMatch });
+            }
+        });
+    }    
 });
 
 //add a new campground
