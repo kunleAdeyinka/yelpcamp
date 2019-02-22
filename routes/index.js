@@ -30,7 +30,7 @@ router.post("/register", (req, res) => {
         avatar: req.body.avatar
     });
 
-    if(req.body.admincode === keys.adminCode){
+    if(req.body.admincode === process.env.adminCode){
         newUser.isAdmin = true;
     }
 

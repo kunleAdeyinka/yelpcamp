@@ -24,7 +24,7 @@ const app = express();
 
 //connect to mlab db
 mongoose.set('useFindAndModify', false);
-mongoose.connect(keys.mongoURI);
+mongoose.connect(process.env.mongoURI);
 mongoose.connection.once('open', () => {
     console.log('connected to database..Yelpcampdb');
 });

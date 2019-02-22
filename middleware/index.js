@@ -1,5 +1,7 @@
 const Campground = require("../models/campground");
 const Comment = require("../models/comment");
+const axios = require("axios");
+const fetch = require('node-fetch');
 // all the middle ware gor the app
 const middlewareObj = {};
 
@@ -57,6 +59,14 @@ middlewareObj.isLoggedIn = (req, res, next) => {
 
 middlewareObj.escapeRegex = (text) => {
     return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+};
+
+middlewareObj.fetchLocation = async (location, req, res) => {
+   
+    const response = await fetch("https://api.mapbox.com/v4/geocode/mapbox.places/" + location + ".json?access_token=pk.eyJ1IjoiYWFkZXlpbmthMDA3IiwiYSI6ImNqcTk0ZWptZTB2YWM0M2s0dm4ycHBhazEifQ.4Lz7IcxUsjLrskOC6z0cPQ");        
+    const locationResult = await response.json();
+    
+    return locationResult.features[0];
 };
 
 
