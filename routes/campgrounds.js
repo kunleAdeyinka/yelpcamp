@@ -5,6 +5,8 @@ const multer = require("multer");
 const cloudinary = require("cloudinary");
 
 const Campground = require("../models/campground");
+const User = require("../models/user");
+const Notification = require("../models/notification");
 const middleware = require("../middleware");
 
 const storage = multer.diskStorage({
@@ -60,60 +62,58 @@ router.get("/", (req, res) => {
 });
 
 //add a new campground
-router.post("/", middleware.isLoggedIn,  upload.single('image'), (req, res) => {
+router.post("/", middleware.isLoggedIn,  upload.single('image'), async (req, res) => {
 
-    var locationArray = [];
+    let locationObj = await middleware.fetchLocation(req.body.campground.location, req, res);
+    let result = {};
 
-    axios.get("https://api.mapbox.com/v4/geocode/mapbox.places/" + req.body.campground.location + ".json?access_token=pk.eyJ1IjoiYWFkZXlpbmthMDA3IiwiYSI6ImNqcTk0ZWptZTB2YWM0M2s0dm4ycHBhazEifQ.4Lz7IcxUsjLrskOC6z0cPQ")
-    .then(response => {
-        locationArray = response.data.features[0].geometry.coordinates;
-        
-        if(!locationArray.length){
-            req.flash("error", "Invalid Address");
+    if(req.file){
+        try{
+            result = await cloudinary.v2.uploader.upload(req.file.path);
+        }catch(err){
+            req.flash("error", err.message);
             return res.redirect("back");
+        } 
+        
+    }
+
+    let author = {
+        id: req.user._id,
+        username: req.user.username
+    };
+
+
+    let newCampground = {
+        name: req.body.campground.name, 
+        price: req.body.campground.price, 
+        image: result.secure_url, 
+        imageId: result.public_id,
+        description: req.body.campground.description, 
+        author: author,
+        location: req.body.campground.location,
+        lat: locationObj.center[1],
+        lng: locationObj.center[0] 
+    };
+
+    try {
+        let campground = await Campground.create(newCampground);
+        let user = await User.findById(req.user._id).populate('followers').exec();
+        let newNotification = {
+            username: req.user.username,
+            campgroundId: campground.id
+        };
+
+        for(const follower of user.followers) {
+            let notification = await Notification.create(newNotification);
+            follower.notifications.push(notification);
+            follower.save();
         }
 
-        var lat = locationArray[1];
-        var lng = locationArray[0];
-    
-        cloudinary.uploader.upload(req.file.path, (result) => {
-            // add cloudinary url for the image to the campground object under image property
-            req.body.campground.image = result.secure_url;
-            req.body.campground.imageId = result.public_id;
-            // add author to campground
-            req.body.campground.author = {
-                id: req.user._id,
-                username: req.user.username
-            };
-
-            var newCampground = { 
-                name: req.body.campground.name, 
-                price: req.body.campground.price, 
-                image: req.body.campground.image, 
-                imageId: req.body.campground.imageId,
-                description: req.body.campground.description, 
-                author: req.body.campground.author,
-                location: req.body.campground.location,
-                lat: lat,
-                lng: lng 
-            };
-
-            Campground.create(newCampground, (err, newlyCreated) => {
-                if(err){
-                    req.flash('error', err.message);
-                    return res.redirect('back');
-                }else{
-                    console.log(newlyCreated);
-                    res.redirect("/campgrounds/") + + newlyCreated.id;
-                }
-            });
-        });
-    
-    }).catch(error => {
-        console.log(error);
-        req.flash("error", "Invalid Address");
-        return res.redirect("back");
-    });
+        res.redirect(`/campgrounds/${campground.id}`);
+    } catch (err) {
+        req.flash('error', err.message);
+        res.redirect('back');
+    }
 });
 
 
@@ -175,11 +175,9 @@ router.put("/:id", middleware.checkCampgroundOwnerShip, upload.single('image'), 
                 try{
                     await cloudinary.v2.uploader.destroy(foundCampground.imageId); 
                     let result = await cloudinary.v2.uploader.upload(req.file.path);
-                    
-                    console.log(result);
 
-                    //foundCampground.imageId = result.public_id;
-                    //foundCampground.image = result.secure_url; 
+                    foundCampground.imageId = result.public_id;
+                    foundCampground.image = result.secure_url; 
                 }catch(err){
                     req.flash("error", err.message);
                    return res.redirect("back");
