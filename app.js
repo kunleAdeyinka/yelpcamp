@@ -24,7 +24,7 @@ const app = express();
 
 //connect to mlab db
 mongoose.set('useFindAndModify', false);
-mongoose.connect(keys.mongoURI);
+mongoose.connect(process.env.mongoURI);
 mongoose.connection.once('open', () => {
     console.log('connected to database..Yelpcampdb');
 });
@@ -52,15 +52,23 @@ app.use(bodyParser.urlencoded({extended: true}));
 app.set("view engine", "ejs");
 app.use(express.static(__dirname + "/public"));
 app.use(methodOverride("_method"));
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
     res.locals.currentUser = req.user;
+    if(req.user){
+        try {
+            let user = await User.findById(req.user._id).populate('notifications', null, { isRead: false }).exec();
+            res.locals.notifications = user.notifications.reverse();
+        } catch(err){
+            console.log(err.message); 
+        }
+    }
     res.locals.error = req.flash("error");
     res.locals.success = req.flash("success");
     next();
 });
 
 
-app.use(indexRoutes);
+app.use("/",indexRoutes);
 app.use("/campgrounds", campgroundRoutes);
 app.use("/campgrounds/:id/comments", commentRoutes);
 

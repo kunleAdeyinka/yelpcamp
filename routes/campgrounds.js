@@ -1,74 +1,119 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const multer = require("multer");
+const cloudinary = require("cloudinary");
 
 const Campground = require("../models/campground");
+const User = require("../models/user");
+const Notification = require("../models/notification");
 const middleware = require("../middleware");
 
-const url = ''
+const storage = multer.diskStorage({
+    filename: (req, file, callback) => {
+        callback(null, Date.now() + file.originalname);
+    }
+});
+
+const imageFilter = (req, file, cb) => {
+    //accepts image files only
+    if(!file.originalname.match(/\.(jpg|jpeg|png|gif)$/i)){
+        return cb(new Error('Only image files are allowed!.'), false);
+    }
+    cb(null, true);
+};
+
+const upload = multer({ storage: storage, fileFilter: imageFilter });
+
+cloudinary.config({
+    cloud_name: process.env.CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY, 
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 
 //show all campgrounds
 router.get("/", (req, res) => {
-    Campground.find({}, (err, allCampgrounds) => {
-        if(err){
-            console.log(err);
-        }else{
-            res.render("campgrounds/index", { campgrounds: allCampgrounds });
-        }
-    });
+    let noMatch = null;
+
+    if(req.query.search){
+
+        const regex = new RegExp(middleware.escapeRegex(req.query.search), 'gi');
+
+        Campground.find({name: regex}, (err, allCampgrounds) => {
+            if(err){
+                console.log(err);
+            }else{
+                if(allCampgrounds.length < 1) {
+                    noMatch = "No campgrounds match that query, please try again.";
+                }
+                res.render("campgrounds/index", { campgrounds: allCampgrounds, noMatch: noMatch });
+            }
+        });
+    }else{
+        Campground.find({}, (err, allCampgrounds) => {
+            if(err){
+                console.log(err);
+            }else{
+                res.render("campgrounds/index", { campgrounds: allCampgrounds, noMatch: noMatch });
+            }
+        });
+    }    
 });
 
 //add a new campground
-router.post("/", middleware.isLoggedIn,  (req, res) => {
+router.post("/", middleware.isLoggedIn,  upload.single('image'), async (req, res) => {
 
-    var campName = req.body.name;
-    var campImage = req.body.image;
-    var description = req.body.description;
-    var price = req.body.price;
-    var locationArray = [];
-    var author = {
+    let locationObj = await middleware.fetchLocation(req.body.campground.location, req, res);
+    let result = {};
+
+    if(req.file){
+        try{
+            result = await cloudinary.v2.uploader.upload(req.file.path);
+        }catch(err){
+            req.flash("error", err.message);
+            return res.redirect("back");
+        } 
+        
+    }
+
+    let author = {
         id: req.user._id,
         username: req.user.username
     };
 
-    axios.get("https://api.mapbox.com/v4/geocode/mapbox.places/" + req.body.location + ".json?access_token=pk.eyJ1IjoiYWFkZXlpbmthMDA3IiwiYSI6ImNqcTk0ZWptZTB2YWM0M2s0dm4ycHBhazEifQ.4Lz7IcxUsjLrskOC6z0cPQ")
-    .then(response => {
-        locationArray = response.data.features[0].geometry.coordinates;
-        
-        if(!locationArray.length){
-            req.flash("error", "Invalid Address");
-            return res.redirect("back");
-        }
 
-        var lat = locationArray[1];
-        var lng = locationArray[0];
-        var location = response.data.features[0].text;
-        var newCampground = { 
-            name: campName, 
-            price: price, 
-            image: campImage, 
-            description: description, 
-            author: author,
-            location: location,
-            lat: lat,
-            lng: lng 
+    let newCampground = {
+        name: req.body.campground.name, 
+        price: req.body.campground.price, 
+        image: result.secure_url, 
+        imageId: result.public_id,
+        description: req.body.campground.description, 
+        author: author,
+        location: req.body.campground.location,
+        lat: locationObj.center[1],
+        lng: locationObj.center[0] 
+    };
+
+    try {
+        let campground = await Campground.create(newCampground);
+        let user = await User.findById(req.user._id).populate('followers').exec();
+        let newNotification = {
+            username: req.user.username,
+            campgroundId: campground.id
         };
 
-        Campground.create(newCampground, (err, newlyCreated) => {
-            if(err){
-              console.log(err);  
-            }else{
-                console.log(newlyCreated);
-                res.redirect("/campgrounds");
-            }
-        });
-    
-    }).catch(error => {
-        console.log(error);
-        req.flash("error", "Invalid Address");
-        return res.redirect("back");
-    });
+        for(const follower of user.followers) {
+            let notification = await Notification.create(newNotification);
+            follower.notifications.push(notification);
+            follower.save();
+        }
+
+        res.redirect(`/campgrounds/${campground.id}`);
+    } catch (err) {
+        req.flash('error', err.message);
+        res.redirect('back');
+    }
 });
 
 
@@ -103,27 +148,67 @@ router.get("/:id/edit", middleware.checkCampgroundOwnerShip, (req, res) => {
 });
 
 //update campground
-router.put("/:id", middleware.checkCampgroundOwnerShip, (req, res) => {
+router.put("/:id", middleware.checkCampgroundOwnerShip, upload.single('image'), (req, res) => {
     
-    Campground.findByIdAndUpdate(req.params.id, req.body.campground, (err, updateCampground) => {
+    Campground.findById(req.params.id, async (err, foundCampground) => {
         if(err){
-            req.flash("error", "Cannot find Campground");
-            res.redirect("/campgrounds");
+            req.flash("error", err.message);
+            res.redirect("back");
         }else{
-            res.redirect("/campgrounds/" + req.params.id);
+            foundCampground.name = req.body.campground.name;
+            foundCampground.price = req.body.campground.price;
+            foundCampground.description =  req.body.campground.description;
+
+            let locationObj = {};
+            
+
+            if(req.body.campground.location !== foundCampground.location){
+
+                locationObj =  await middleware.fetchLocation(req.body.campground.location, req, res);
+                
+                foundCampground.lat = locationObj.center[1];
+                foundCampground.lng = locationObj.center[0];
+                foundCampground.location = locationObj.place_name;
+            }
+
+            if(req.file){
+                try{
+                    await cloudinary.v2.uploader.destroy(foundCampground.imageId); 
+                    let result = await cloudinary.v2.uploader.upload(req.file.path);
+
+                    foundCampground.imageId = result.public_id;
+                    foundCampground.image = result.secure_url; 
+                }catch(err){
+                    req.flash("error", err.message);
+                   return res.redirect("back");
+                }                                                
+            }
+
+            foundCampground.save();
+            req.flash("success","Successfully Updated!");
+            res.redirect("/campgrounds/" + foundCampground._id);
         }
-    });
+        
+        
+    });   
 });
 
 // destroy campground route
 router.delete("/:id", middleware.checkCampgroundOwnerShip, (req, res) => {
-    Campground.findByIdAndRemove(req.params.id, (err) => {
+    Campground.findById(req.params.id, async (err, foundCampground) => {
         if(err){
             req.flash("error", "Cannot find Campground");
             res.redirect("/campgrounds");
-        }else{
-            res.redirect("/campgrounds");
         }
+        try{
+            await cloudinary.v2.uploader.destroy(foundCampground.imageId); 
+            foundCampground.remove();
+            req.flash("success", "Campground was deleted")
+            res.redirect("/campgrounds");
+        }catch(err){
+            req.flash("error", err.message);
+           return  res.redirect("back");
+        }            
     });
 });
 
