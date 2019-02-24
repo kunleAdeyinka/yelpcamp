@@ -16,6 +16,7 @@ const User = require("./models/user");
 const commentRoutes = require("./routes/comments");
 const campgroundRoutes = require("./routes/campgrounds");
 const indexRoutes = require("./routes/index");
+const reviewRoutes = require("./routes/reviews");
 
 
 const app = express();
@@ -71,6 +72,7 @@ app.use(async (req, res, next) => {
 app.use("/",indexRoutes);
 app.use("/campgrounds", campgroundRoutes);
 app.use("/campgrounds/:id/comments", commentRoutes);
+app.use("/campgrounds/:id/reviews", reviewRoutes);
 
 
 app.listen(4000, () => {

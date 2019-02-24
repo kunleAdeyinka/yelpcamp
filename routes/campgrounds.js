@@ -7,6 +7,8 @@ const cloudinary = require("cloudinary");
 const Campground = require("../models/campground");
 const User = require("../models/user");
 const Notification = require("../models/notification");
+const Review = require("../models/review");
+
 const middleware = require("../middleware");
 
 const storage = multer.diskStorage({
@@ -124,7 +126,10 @@ router.get("/new", middleware.isLoggedIn,  (req, res) => {
 
 // show a particular campground
 router.get("/:id", (req, res) => {
-    Campground.findById(req.params.id).populate("comments").exec((err, foundCampground) => {
+    Campground.findById(req.params.id).populate("comments").populate({
+        path: "reviews",
+        options: {sort: {createdAt: -1}}
+    }).exec((err, foundCampground) => {
         if(err || !foundCampground){
             req.flash("error", "Campground not found");
             res.redirect("back");
@@ -150,6 +155,9 @@ router.get("/:id/edit", middleware.checkCampgroundOwnerShip, (req, res) => {
 //update campground
 router.put("/:id", middleware.checkCampgroundOwnerShip, upload.single('image'), (req, res) => {
     
+    //protect the campground.rating field from manipulation
+    delete req.body.campground.rating;
+
     Campground.findById(req.params.id, async (err, foundCampground) => {
         if(err){
             req.flash("error", err.message);
@@ -199,17 +207,32 @@ router.delete("/:id", middleware.checkCampgroundOwnerShip, (req, res) => {
         if(err){
             req.flash("error", "Cannot find Campground");
             res.redirect("/campgrounds");
+        }else{
+            try{
+                await cloudinary.v2.uploader.destroy(foundCampground.imageId); 
+            }catch(err){
+                req.flash("error", err.message);
+               return  res.redirect("back");
+            } 
+            Comment.remove({"_id": {$in: foundCampground.comments}}, (err) => {
+                if (err) {
+                    console.log(err);
+                    return res.redirect("/campgrounds");
+                }
+                Review.remove({"_id": {$in: foundCampground.reviews}}, (err) => {
+                    if (err) {
+                        console.log(err);
+                        return res.redirect("/campgrounds");
+                    }
+                    foundCampground.remove();
+                    req.flash("success", "Campground was deleted")
+                    res.redirect("/campgrounds");
+                });
+            });   
         }
-        try{
-            await cloudinary.v2.uploader.destroy(foundCampground.imageId); 
-            foundCampground.remove();
-            req.flash("success", "Campground was deleted")
-            res.redirect("/campgrounds");
-        }catch(err){
-            req.flash("error", err.message);
-           return  res.redirect("back");
-        }            
+              
     });
 });
+
 
 module.exports = router;
