@@ -53,12 +53,24 @@ router.get("/", (req, res) => {
             }
         });
     }else{
-        Campground.find({}, (err, allCampgrounds) => {
-            if(err){
-                console.log(err);
-            }else{
-                res.render("campgrounds/index", { campgrounds: allCampgrounds, noMatch: noMatch });
-            }
+        let perPage = 8;
+        let pageQuery = parseInt(req.query.page);
+        let pageNumber = pageQuery ? pageQuery : 1;
+
+
+        Campground.find({}).skip((perPage * pageNumber) - perPage).limit(perPage).exec((err, allCampgrounds) => {
+            Campground.count().exec((err, count) => {
+                if(err){
+             res.       console.log(err);
+                }else{
+                    res.render("campgrounds/index", { 
+                        campgrounds: allCampgrounds, 
+                        current: pageNumber, 
+                        pages: Math.ceil(count/perPage), 
+                        noMatch: noMatch 
+                    });
+                }
+            })
         });
     }    
 });
